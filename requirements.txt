@@ -1,0 +1,12 @@
+fastapi[standard]
+passlib
+psycopg2
+pydantic
+pyjwt
+python-multipart
+redis
+sqlmodel
+types-passlib
+types-redis
+uvicorn
+pytest
