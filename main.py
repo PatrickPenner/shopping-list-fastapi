@@ -60,7 +60,7 @@ class SubmitItem(BaseModel):
 
 
 class Item(SQLModel, table=True):
-    """Shopping list model"""
+    """Shopping list item model"""
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     list_id: uuid.UUID = Field(foreign_key="shoppinglist.id")
     open: bool
@@ -81,7 +81,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Generate a hash from a plain passowrd"""
+    """Generate a hash from a plain password"""
     return pwd_context.hash(password)
 
 
@@ -225,7 +225,7 @@ async def create_list(
     """Create a shopping list"""
     open_shopping_list = session.exec(
         select(ShoppingList).where(
-            ShoppingList.open is True, ShoppingList.user_id == current_user.id
+            ShoppingList.open == True, ShoppingList.user_id == current_user.id
         )
     ).first()
     if open_shopping_list is not None:
@@ -265,7 +265,7 @@ async def update_list(
     if submit_shopping_list.open:
         open_shopping_list = session.exec(
             select(ShoppingList).where(
-                ShoppingList.open is True, ShoppingList.user_id == current_user.id
+                ShoppingList.open == True, ShoppingList.user_id == current_user.id
             )
         ).first()
         if open_shopping_list is not None:
