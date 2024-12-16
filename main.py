@@ -9,6 +9,7 @@ from typing import Annotated, Generator, Optional
 from passlib.context import CryptContext
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, status, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
@@ -19,17 +20,20 @@ from sqlmodel import Session, SQLModel, create_engine, Field, select, Relationsh
 
 class Token(BaseModel):
     """JWT token model"""
+
     access_token: str
     token_type: str
 
 
 class TokenData(BaseModel):
     """JWT token data model"""
+
     username: str | None = None
 
 
 class ShoppingListUser(SQLModel, table=True):
     """Shopping list user model"""
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
     password: str
@@ -39,12 +43,14 @@ class ShoppingListUser(SQLModel, table=True):
 
 class SubmitShoppingList(BaseModel):
     """Shopping list submission model"""
+
     open: bool
     items: Optional[list["SubmitItem"]]
 
 
 class ShoppingList(SQLModel, table=True):
     """Shopping list model"""
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="shoppinglistuser.id")
     open: bool
@@ -55,12 +61,14 @@ class ShoppingList(SQLModel, table=True):
 
 class SubmitItem(BaseModel):
     """Shopping list item submission model"""
+
     name: str
     open: bool
 
 
 class Item(SQLModel, table=True):
     """Shopping list item model"""
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     list_id: uuid.UUID = Field(foreign_key="shoppinglist.id")
     open: bool
@@ -175,6 +183,18 @@ async def lifespan(app):
 
 
 app = FastAPI(lifespan=lifespan)
+
+origins = [
+    "*",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/auth/")
@@ -329,7 +349,8 @@ async def update_item(
     """Update shopping list item"""
     shopping_list = session.exec(
         select(ShoppingList).where(
-            ShoppingList.user_id == current_user.id, ShoppingList.id == uuid.UUID(list_id)
+            ShoppingList.user_id == current_user.id,
+            ShoppingList.id == uuid.UUID(list_id),
         )
     ).first()
     # if the list does not exist (or does not belong to the user) then the item can't either
@@ -339,7 +360,9 @@ async def update_item(
         )
 
     item = session.exec(
-        select(Item).where(Item.id == uuid.UUID(item_id), Item.list_id == uuid.UUID(list_id))
+        select(Item).where(
+            Item.id == uuid.UUID(item_id), Item.list_id == uuid.UUID(list_id)
+        )
     ).first()
     if item is None:
         raise HTTPException(
