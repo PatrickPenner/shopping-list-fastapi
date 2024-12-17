@@ -10,7 +10,6 @@ from typing import Annotated, Generator, Optional
 from passlib.context import CryptContext
 import jwt
 from fastapi import Depends, FastAPI, HTTPException, status, Response, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
@@ -190,18 +189,6 @@ DEV_MODE = "dev" in sys.argv
 
 api = FastAPI()
 api = FastAPI(lifespan=lifespan)
-
-origins = [
-    "*",
-]
-
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 @api.post("/auth/")
