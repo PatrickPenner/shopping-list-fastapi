@@ -1,4 +1,5 @@
 """Test shopping list API"""
+
 import uuid
 from datetime import datetime
 
@@ -30,6 +31,7 @@ def session_fixture():
 @pytest.fixture(name="client")
 def client_fixture(session: Session):
     """FastAPI client fixture"""
+
     def get_session_override():
         return session
 
@@ -83,6 +85,16 @@ def test_auth(session: Session, client: TestClient):
     response_json = response.json()
     assert "access_token" in response_json
     assert "token_type" in response_json
+
+    response = client.get(
+        "/lists/", headers={"Authorization": f"Bearer {response_json['access_token']}"}
+    )
+    assert response.status_code == 200
+
+    client.cookies.set("bearer", response_json["access_token"])
+    response = client.get("/lists/")
+    client.cookies.delete("bearer")
+    assert response.status_code == 200
 
     response = client.post(
         "/auth/",
