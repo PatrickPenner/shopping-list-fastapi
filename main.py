@@ -2,14 +2,14 @@
 
 import os
 import uuid
+import sys
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from typing import Annotated, Generator, Optional
 
 from passlib.context import CryptContext
 import jwt
-from fastapi import Depends, FastAPI, HTTPException, status, Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends, FastAPI, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel
@@ -119,7 +119,7 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = os.environ["ALGORITHM"]
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth", auto_error=False)
 
 
 def authenticate_user(
@@ -136,20 +136,18 @@ def authenticate_user(
     return user
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(data: dict, expire: datetime | None = None) -> str:
     """Create a JWT token"""
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
 async def get_current_user(
-    session: SessionDep, token: Annotated[str, Depends(oauth2_scheme)]
+    session: SessionDep,
+    request: Request,
+    token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> ShoppingListUser:
     """Get user information for a token from the client"""
     credentials_exception = HTTPException(
@@ -157,6 +155,11 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if token is None and "bearer" in request.cookies:
+        token = request.cookies.get("bearer")
+    if token is None:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -165,7 +168,7 @@ async def get_current_user(
     except InvalidTokenError as exc:
         raise credentials_exception from exc
     user = session.exec(
-        select(ShoppingListUser).where(ShoppingListUser.name == username)
+        select(ShoppingListUser).where(ShoppingListUser.name == "test")
     ).first()
     if user is None:
         raise credentials_exception
@@ -182,24 +185,17 @@ async def lifespan(app):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+DEV_MODE = "dev" in sys.argv
 
-origins = [
-    "*",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+api = FastAPI()
+api = FastAPI(lifespan=lifespan)
 
 
-@app.post("/auth/")
+@api.post("/auth/")
 async def get_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: SessionDep,
+    response: Response,
 ) -> Token:
     """Get a JWT token by user/password authentication"""
     user = authenticate_user(session, form_data.username, form_data.password)
@@ -209,14 +205,20 @@ async def get_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.name}, expires_delta=access_token_expires
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.name}, expire=expire)
+    response.set_cookie(
+        "bearer",
+        access_token,
+        expires=expire,
+        secure=(not DEV_MODE),
+        httponly=(not DEV_MODE),
+        samesite="strict" if not DEV_MODE else "lax",
     )
     return Token(access_token=access_token, token_type="bearer")
 
 
-@app.get("/lists/")
+@api.get("/lists/")
 async def get_lists(
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
     session: SessionDep,
@@ -236,7 +238,7 @@ async def get_lists(
     return list(lists)
 
 
-@app.post("/lists/")
+@api.post("/lists/")
 async def create_list(
     submit_shopping_list: SubmitShoppingList,
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
@@ -273,7 +275,7 @@ async def create_list(
     return shopping_list
 
 
-@app.put("/lists/{list_id}/")
+@api.put("/lists/{list_id}/")
 async def update_list(
     submit_shopping_list: SubmitShoppingList,
     list_id: uuid.UUID,
@@ -315,7 +317,7 @@ async def update_list(
     return shopping_list
 
 
-@app.get("/lists/{list_id}/items/")
+@api.get("/lists/{list_id}/items/")
 async def get_items(
     list_id: uuid.UUID,
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
@@ -338,7 +340,7 @@ async def get_items(
     return shopping_list.items
 
 
-@app.put("/lists/{list_id}/items/{item_id}/")
+@api.put("/lists/{list_id}/items/{item_id}/")
 async def update_item(
     list_id,
     item_id,
@@ -374,3 +376,6 @@ async def update_item(
     session.commit()
     session.refresh(item)
     return item
+
+
+api.mount("/api/v1", api)
