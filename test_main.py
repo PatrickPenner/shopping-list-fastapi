@@ -8,7 +8,7 @@ from sqlmodel import Session, create_engine, SQLModel, StaticPool, select
 from fastapi.testclient import TestClient
 
 from main import (
-    app,
+    api,
     get_password_hash,
     ShoppingListUser,
     ShoppingList,
@@ -35,10 +35,10 @@ def client_fixture(session: Session):
     def get_session_override():
         return session
 
-    app.dependency_overrides[get_session] = get_session_override
-    client = TestClient(app)
+    api.dependency_overrides[get_session] = get_session_override
+    client = TestClient(api)
     yield client
-    app.dependency_overrides.clear()
+    api.dependency_overrides.clear()
 
 
 @pytest.fixture(name="test_user")

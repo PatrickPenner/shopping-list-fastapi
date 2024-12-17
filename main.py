@@ -188,13 +188,14 @@ async def lifespan(app):
 
 DEV_MODE = "dev" in sys.argv
 
-app = FastAPI(lifespan=lifespan)
+api = FastAPI()
+api = FastAPI(lifespan=lifespan)
 
 origins = [
     "*",
 ]
 
-app.add_middleware(
+api.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
@@ -203,7 +204,7 @@ app.add_middleware(
 )
 
 
-@app.post("/auth/")
+@api.post("/auth/")
 async def get_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     session: SessionDep,
@@ -230,7 +231,7 @@ async def get_access_token(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@app.get("/lists/")
+@api.get("/lists/")
 async def get_lists(
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
     session: SessionDep,
@@ -250,7 +251,7 @@ async def get_lists(
     return list(lists)
 
 
-@app.post("/lists/")
+@api.post("/lists/")
 async def create_list(
     submit_shopping_list: SubmitShoppingList,
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
@@ -287,7 +288,7 @@ async def create_list(
     return shopping_list
 
 
-@app.put("/lists/{list_id}/")
+@api.put("/lists/{list_id}/")
 async def update_list(
     submit_shopping_list: SubmitShoppingList,
     list_id: uuid.UUID,
@@ -329,7 +330,7 @@ async def update_list(
     return shopping_list
 
 
-@app.get("/lists/{list_id}/items/")
+@api.get("/lists/{list_id}/items/")
 async def get_items(
     list_id: uuid.UUID,
     current_user: Annotated[ShoppingListUser, Depends(get_current_user)],
@@ -352,7 +353,7 @@ async def get_items(
     return shopping_list.items
 
 
-@app.put("/lists/{list_id}/items/{item_id}/")
+@api.put("/lists/{list_id}/items/{item_id}/")
 async def update_item(
     list_id,
     item_id,
@@ -388,3 +389,6 @@ async def update_item(
     session.commit()
     session.refresh(item)
     return item
+
+
+api.mount("/api/v1", api)
